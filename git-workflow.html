@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Git Actually Works - Interactive Visualization</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+            color: white;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 50px;
+            animation: fadeInDown 0.6s ease-out;
+        }
+
+        .header h1 {
+            font-size: 48px;
+            font-weight: 700;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header p {
+            font-size: 18px;
+            color: #94a3b8;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 50px;
+            animation: fadeIn 0.8s ease-out 0.2s backwards;
+        }
+
+        .btn {
+            padding: 14px 28px;
+            background: #334155;
+            color: white;
+            border: 2px solid transparent;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            font-family: 'Courier New', monospace;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn.show-all {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+        }
+
+        .btn.active {
+            border-color: currentColor;
+            box-shadow: 0 0 20px currentColor;
+        }
+
+        .visualization {
+            position: relative;
+            height: 700px;
+            margin-bottom: 40px;
+            animation: fadeIn 1s ease-out 0.4s backwards;
+        }
+
+        .machine-containers {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding: 20px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .machine-box {
+            width: 48%;
+            height: 350px;
+            border: 3px dashed rgba(255, 255, 255, 0.3);
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(5px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            transition: all 0.4s ease;
+        }
+
+        .machine-box.local {
+            border-color: rgba(34, 197, 94, 0.4);
+            background: rgba(34, 197, 94, 0.08);
+        }
+
+        .machine-box.remote {
+            border-color: rgba(168, 85, 247, 0.4);
+            background: rgba(168, 85, 247, 0.08);
+        }
+
+        .machine-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 15px;
+        }
+
+        .machine-icon {
+            font-size: 32px;
+            opacity: 0.8;
+        }
+
+        .machine-box.local .machine-icon {
+            color: #22c55e;
+        }
+
+        .machine-box.remote .machine-icon {
+            color: #a855f7;
+        }
+
+        .machine-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: white;
+            text-align: center;
+        }
+
+        .machine-subtitle {
+            font-size: 14px;
+            opacity: 0.7;
+            color: white;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        .machine-examples {
+            font-size: 12px;
+            opacity: 0.6;
+            color: white;
+            text-align: center;
+            font-style: italic;
+        }
+
+        .areas-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 80px;
+            height: 100%;
+            position: relative;
+            z-index: 2;
+        }
+
+        .area {
+            width: 220px;
+            height: 140px;
+            border-radius: 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border: 3px solid transparent;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .area.active {
+            transform: scale(1.08);
+            border-color: white;
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.4), 0 0 30px currentColor;
+        }
+
+        .area.inactive {
+            opacity: 0.4;
+            transform: scale(0.95);
+        }
+
+        .area-title {
+            font-size: 19px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            text-align: center;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .area-desc {
+            font-size: 14px;
+            opacity: 0.95;
+            text-align: center;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+        }
+
+        .area.working {
+            background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+        }
+
+        .area.staging {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        }
+
+        .area.local {
+            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+        }
+
+        .area.remote {
+            background: linear-gradient(135deg, #a855f7 0%, #9333ea 100%);
+        }
+
+        .arrows-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .arrow {
+            position: absolute;
+            opacity: 0;
+            transition: opacity 0.4s ease;
+        }
+
+        .arrow.visible {
+            opacity: 1;
+        }
+
+        .arrow-line {
+            position: absolute;
+            height: 6px;
+            transform-origin: left center;
+            border-radius: 3px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .arrow-head {
+            position: absolute;
+            width: 0;
+            height: 0;
+            border-style: solid;
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+        }
+
+        .arrow-label {
+            position: absolute;
+            font-size: 15px;
+            font-weight: 700;
+            font-family: 'Courier New', monospace;
+            white-space: nowrap;
+            padding: 6px 12px;
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        }
+
+        .particle {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            animation: moveParticle 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        }
+
+        @keyframes moveParticle {
+            0%, 100% {
+                opacity: 0;
+            }
+            10% {
+                opacity: 1;
+            }
+            90% {
+                opacity: 1;
+            }
+        }
+
+        .description-box {
+            max-width: 700px;
+            margin: 0 auto;
+            padding: 24px 32px;
+            background: rgba(30, 41, 59, 0.8);
+            border-radius: 16px;
+            border: 2px solid;
+            animation: slideUp 0.4s ease-out;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .description-box h3 {
+            font-size: 22px;
+            margin-bottom: 12px;
+        }
+
+        .description-box p {
+            color: #cbd5e1;
+            line-height: 1.7;
+            font-size: 16px;
+        }
+
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Responsive Design */
+        @media (max-width: 1200px) {
+            .areas-container {
+                gap: 60px;
+            }
+            .area {
+                width: 180px;
+                height: 120px;
+            }
+            .machine-box {
+                height: 300px;
+            }
+            .machine-title {
+                font-size: 18px;
+            }
+            .machine-icon {
+                font-size: 28px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 36px;
+            }
+            .areas-container {
+                flex-wrap: wrap;
+                gap: 40px;
+            }
+            .visualization {
+                height: auto;
+                min-height: 800px;
+            }
+            .area {
+                width: 160px;
+                height: 100px;
+            }
+            .arrow {
+                display: none;
+            }
+            .machine-containers {
+                flex-direction: column;
+                gap: 20px;
+                padding: 10px;
+            }
+            .machine-box {
+                width: 100%;
+                height: 200px;
+            }
+            .machine-title {
+                font-size: 16px;
+            }
+            .machine-subtitle {
+                font-size: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>How Git Actually Works</h1>
+            <p>Click on commands below to see the workflow in action</p>
+        </div>
+
+        <div class="controls">
+            <button class="btn show-all" onclick="toggleShowAll()">Show All Commands</button>
+            <button class="btn" data-command="add" onclick="selectCommand('add')">git add</button>
+            <button class="btn" data-command="commit" onclick="selectCommand('commit')">git commit</button>
+            <button class="btn" data-command="push" onclick="selectCommand('push')">git push</button>
+            <button class="btn" data-command="fetch" onclick="selectCommand('fetch')">git fetch</button>
+            <button class="btn" data-command="pull" onclick="selectCommand('pull')">git pull</button>
+            <button class="btn" data-command="merge" onclick="selectCommand('merge')">git merge</button>
+            <button class="btn" data-command="checkout" onclick="selectCommand('checkout')">git checkout</button>
+            <button class="btn" data-command="clone" onclick="selectCommand('clone')">git clone</button>
+        </div>
+
+        <div class="visualization">
+            <div class="machine-containers">
+                <div class="machine-box local">
+                    <div class="machine-header">
+                        <i class="fas fa-laptop machine-icon"></i>
+                        <div>
+                            <div class="machine-title">Your Local Machine</div>
+                            <div class="machine-subtitle">Windows/Mac/Linux Computer</div>
+                            <div class="machine-examples">Your personal development environment</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="machine-box remote">
+                    <div class="machine-header">
+                        <i class="fab fa-github machine-icon"></i>
+                        <div>
+                            <div class="machine-title">Remote Repository</div>
+                            <div class="machine-subtitle">GitHub/GitLab/Bitbucket</div>
+                            <div class="machine-examples">Cloud-hosted code repository</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="arrows-container" id="arrows"></div>
+            <div class="areas-container">
+                <div class="area working" data-area="working">
+                    <div class="area-title">
+                        <i class="fas fa-folder-open" style="margin-right: 8px; color: #fbbf24;"></i>
+                        Working Directory
+                    </div>
+                    <div class="area-desc">Your local files</div>
+                </div>
+                <div class="area staging" data-area="staging">
+                    <div class="area-title">
+                        <i class="fas fa-layer-group" style="margin-right: 8px; color: #60a5fa;"></i>
+                        Staging Area
+                    </div>
+                    <div class="area-desc">Files ready to commit</div>
+                </div>
+                <div class="area local" data-area="local">
+                    <div class="area-title">
+                        <i class="fas fa-database" style="margin-right: 8px; color: #34d399;"></i>
+                        Local Repo
+                    </div>
+                    <div class="area-desc">Your local Git history</div>
+                </div>
+                <div class="area remote" data-area="remote">
+                    <div class="area-title">
+                        <i class="fas fa-cloud" style="margin-right: 8px; color: #c084fc;"></i>
+                        Remote Repo
+                    </div>
+                    <div class="area-desc">GitHub/Cloud repository</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="description"></div>
+    </div>
+
+    <script>
+        const commands = {
+            add: {
+                from: 'working',
+                to: 'staging',
+                color: '#3b82f6',
+                label: 'git add',
+                description: 'Stages changes from your working directory to the staging area, preparing them for commit.'
+            },
+            commit: {
+                from: 'staging',
+                to: 'local',
+                color: '#8b5cf6',
+                label: 'git commit',
+                description: 'Records staged changes to your local repository with a message describing what changed.'
+            },
+            push: {
+                from: 'local',
+                to: 'remote',
+                color: '#ec4899',
+                label: 'git push',
+                description: 'Uploads your local commits to the remote repository (like GitHub).'
+            },
+            fetch: {
+                from: 'remote',
+                to: 'local',
+                color: '#f59e0b',
+                label: 'git fetch',
+                description: 'Downloads changes from remote repository but doesn\'t merge them into your working directory.'
+            },
+            pull: {
+                from: 'remote',
+                to: 'working',
+                color: '#f59e0b',
+                label: 'git pull',
+                description: 'Downloads and merges changes from remote repository directly into your working directory.'
+            },
+            merge: {
+                from: 'staging',
+                to: 'working',
+                color: '#10b981',
+                label: 'git merge',
+                description: 'Combines changes from the staging area into your working directory.'
+            },
+            checkout: {
+                from: 'local',
+                to: 'working',
+                color: '#6366f1',
+                label: 'git checkout',
+                description: 'Switches branches or restores files from your local repository to working directory.'
+            },
+            clone: {
+                from: 'remote',
+                to: 'all',
+                color: '#14b8a6',
+                label: 'git clone',
+                description: 'Creates a complete copy of a remote repository on your local machine.'
+            }
+        };
+
+        let activeCommand = null;
+        let showAll = false;
+
+        function getAreaPosition(areaName) {
+            const area = document.querySelector(`.area[data-area="${areaName}"]`);
+            if (!area) return null;
+            const rect = area.getBoundingClientRect();
+            const container = document.querySelector('.visualization').getBoundingClientRect();
+            return {
+                x: rect.left - container.left + rect.width / 2,
+                y: rect.top - container.top + rect.height / 2,
+                width: rect.width,
+                height: rect.height
+            };
+        }
+
+        function drawArrow(from, to, color, label, animated = false) {
+            const fromPos = getAreaPosition(from);
+            const toPos = getAreaPosition(to);
+            
+            if (!fromPos || !toPos) return null;
+
+            const arrow = document.createElement('div');
+            arrow.className = 'arrow' + (animated ? ' visible' : '');
+            
+            // Calculate arrow positioning to place them below the entire diagram
+            const isReverse = fromPos.x > toPos.x;
+            
+            // Position arrows below all boxes with consistent spacing
+            const arrowY = Math.max(fromPos.y, toPos.y) + Math.max(fromPos.height, toPos.height) / 2 + 60;
+            
+            const startX = fromPos.x + (isReverse ? -fromPos.width/2 - 10 : fromPos.width/2 + 10);
+            const startY = arrowY;
+            const endX = toPos.x + (isReverse ? toPos.width/2 + 10 : -toPos.width/2 - 10);
+            const endY = arrowY;
+            
+            const dx = endX - startX;
+            const dy = endY - startY;
+            const length = Math.sqrt(dx * dx + dy * dy);
+            const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+            
+            // Arrow line
+            const line = document.createElement('div');
+            line.className = 'arrow-line';
+            line.style.width = length + 'px';
+            line.style.left = startX + 'px';
+            line.style.top = startY + 'px';
+            line.style.transform = `rotate(${angle}deg)`;
+            line.style.background = color;
+            arrow.appendChild(line);
+            
+            // Arrow head
+            const head = document.createElement('div');
+            head.className = 'arrow-head';
+            head.style.left = endX + 'px';
+            head.style.top = (endY - 10) + 'px';
+            head.style.borderWidth = '10px 0 10px 18px';
+            head.style.borderColor = `transparent transparent transparent ${color}`;
+            head.style.transform = `rotate(${angle}deg)`;
+            arrow.appendChild(head);
+            
+            // Label positioned below the arrow
+            const labelEl = document.createElement('div');
+            labelEl.className = 'arrow-label';
+            labelEl.textContent = label;
+            labelEl.style.left = ((startX + endX) / 2) + 'px';
+            labelEl.style.top = (arrowY + 25) + 'px';
+            labelEl.style.color = color;
+            labelEl.style.transform = 'translateX(-50%)';
+            arrow.appendChild(labelEl);
+            
+            // Animated particle
+            if (animated) {
+                const particle = document.createElement('div');
+                particle.className = 'particle';
+                particle.style.background = color;
+                particle.style.boxShadow = `0 0 15px ${color}`;
+                particle.style.width = '12px';
+                particle.style.height = '12px';
+                
+                function animateParticle() {
+                    let progress = 0;
+                    const animate = () => {
+                        progress += 0.015;
+                        if (progress > 1) progress = 0;
+                        
+                        const x = startX + dx * progress;
+                        const y = startY + dy * progress;
+                        particle.style.left = (x - 6) + 'px';
+                        particle.style.top = (y - 6) + 'px';
+                        
+                        if (arrow.parentElement) {
+                            requestAnimationFrame(animate);
+                        }
+                    };
+                    animate();
+                }
+                
+                arrow.appendChild(particle);
+                animateParticle();
+            }
+            
+            return arrow;
+        }
+
+        function updateVisualization() {
+            const arrowsContainer = document.getElementById('arrows');
+            arrowsContainer.innerHTML = '';
+            
+            const areas = document.querySelectorAll('.area');
+            areas.forEach(area => {
+                area.classList.remove('active', 'inactive');
+            });
+            
+            if (showAll) {
+                Object.entries(commands).forEach(([key, cmd]) => {
+                    const arrow = drawArrow(cmd.from, cmd.to, cmd.color, cmd.label, false);
+                    if (arrow) {
+                        arrow.classList.add('visible');
+                        arrowsContainer.appendChild(arrow);
+                    }
+                });
+            } else if (activeCommand) {
+                const cmd = commands[activeCommand];
+                const arrow = drawArrow(cmd.from, cmd.to, cmd.color, cmd.label, true);
+                if (arrow) {
+                    arrowsContainer.appendChild(arrow);
+                }
+                
+                // Highlight active areas
+                areas.forEach(area => {
+                    const areaName = area.dataset.area;
+                    if (cmd.to === 'all' || areaName === cmd.from || areaName === cmd.to) {
+                        area.classList.add('active');
+                    } else {
+                        area.classList.add('inactive');
+                    }
+                });
+                
+                // Show description
+                const descBox = document.createElement('div');
+                descBox.className = 'description-box';
+                descBox.style.borderColor = cmd.color;
+                descBox.innerHTML = `
+                    <h3 style="color: ${cmd.color}">${cmd.label}</h3>
+                    <p>${cmd.description}</p>
+                `;
+                document.getElementById('description').innerHTML = '';
+                document.getElementById('description').appendChild(descBox);
+            } else {
+                document.getElementById('description').innerHTML = '';
+            }
+        }
+
+        function selectCommand(command) {
+            activeCommand = command;
+            showAll = false;
+            
+            document.querySelectorAll('.btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.querySelector(`[data-command="${command}"]`).classList.add('active');
+            document.querySelector('.show-all').textContent = 'Show All Commands';
+            
+            updateVisualization();
+        }
+
+        function toggleShowAll() {
+            showAll = !showAll;
+            activeCommand = null;
+            
+            document.querySelectorAll('.btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            const btn = document.querySelector('.show-all');
+            btn.textContent = showAll ? 'Hide All' : 'Show All Commands';
+            
+            updateVisualization();
+        }
+
+        // Initial draw
+        window.addEventListener('load', () => {
+            updateVisualization();
+        });
+
+        // Redraw on resize
+        let resizeTimeout;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(updateVisualization, 100);
+        });
+    </script>
+</body>
+</html>
